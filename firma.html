@@ -40,6 +40,27 @@
       margin-bottom: 24px;
     }
 
+    label {
+      display: block;
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+      color: #111;
+      margin-bottom: 20px;
+      outline: none;
+      transition: border 0.15s;
+    }
+    input[type="text"]:focus { border-color: #111; }
+
     .canvas-wrapper {
       position: relative;
       border: 1.5px solid #ddd;
@@ -69,12 +90,6 @@
       line-height: 1.6;
     }
 
-    .canvas-hint svg {
-      display: block;
-      margin: 0 auto 6px;
-      opacity: 0.5;
-    }
-
     .actions {
       display: flex;
       gap: 10px;
@@ -90,7 +105,6 @@
       color: #555;
       font-size: 14px;
       cursor: pointer;
-      transition: background 0.15s;
     }
     .btn-secondary:hover { background: #f5f5f5; }
 
@@ -104,10 +118,16 @@
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      transition: background 0.15s;
     }
     .btn-primary:hover { background: #333; }
     .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+
+    .error-msg {
+      font-size: 13px;
+      color: #c0392b;
+      margin-bottom: 12px;
+      display: none;
+    }
 
     .divider {
       border: none;
@@ -122,7 +142,6 @@
       line-height: 1.5;
     }
 
-    /* Pantalla de éxito */
     .success {
       display: none;
       text-align: center;
@@ -149,12 +168,6 @@
       color: #888;
       margin-bottom: 20px;
     }
-    .preview-img {
-      border: 1px solid #eee;
-      border-radius: 8px;
-      max-width: 100%;
-      margin-bottom: 16px;
-    }
     .btn-restart {
       width: 100%;
       padding: 11px;
@@ -166,52 +179,62 @@
       cursor: pointer;
     }
     .btn-restart:hover { background: #f5f5f5; }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 8px 0 16px;
+      font-size: 14px;
+      color: #888;
+    }
   </style>
 </head>
 <body>
 
 <div class="card">
 
-  <!-- Formulario de firma -->
   <div id="formView">
     <h1>Firma digital</h1>
-    <p class="subtitle">Dibuja tu firma con el dedo en el recuadro</p>
+    <p class="subtitle">Rellena tu nombre y firma con el dedo</p>
 
+    <label for="nombreInput">Nombre completo</label>
+    <input type="text" id="nombreInput" placeholder="Ej: Ana García López" />
+
+    <label>Firma</label>
     <div class="canvas-wrapper">
       <canvas id="signCanvas"></canvas>
-      <div class="canvas-hint" id="hint">
-        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-          <path d="M15.232 5.232l3.536 3.536M9 11l6.536-6.536a2 2 0 012.828 2.828L11.828 13.828a4 4 0 01-1.414.94l-3.414 1.138 1.138-3.414A4 4 0 019 11z"/>
-        </svg>
-        Firma aquí
-      </div>
+      <div class="canvas-hint" id="hint">✍️ Firma aquí</div>
     </div>
+
+    <p class="error-msg" id="errorMsg">Por favor, escribe tu nombre y añade tu firma.</p>
 
     <div class="actions">
       <button class="btn-secondary" id="clearBtn">Borrar</button>
-      <button class="btn-primary" id="saveBtn" disabled>Guardar firma</button>
+      <button class="btn-primary" id="saveBtn">Guardar firma</button>
     </div>
 
+    <p class="loading" id="loading">Guardando... espera un momento ⏳</p>
+
     <hr class="divider" />
-    <p class="legal">Al guardar tu firma confirmas que es tu rúbrica personal y aceptas que tiene validez en el contexto de este formulario.</p>
+    <p class="legal">Al guardar tu firma confirmas que es tu rúbrica personal.</p>
   </div>
 
-  <!-- Pantalla de éxito -->
   <div class="success" id="successView">
     <div class="success-icon">
       <svg width="28" height="28" fill="none" stroke="#2e7d32" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
       </svg>
     </div>
-    <h2>Firma guardada</h2>
-    <p>Tu firma ha sido registrada correctamente. Puedes cerrar esta ventana.</p>
-    <img id="previewImg" class="preview-img" alt="Tu firma" />
+    <h2>¡Firma guardada!</h2>
+    <p id="successName"></p>
     <button class="btn-restart" id="restartBtn">Firmar de nuevo</button>
   </div>
 
 </div>
 
 <script>
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz9er9iDf0hZHiE7dye84ZOg06AC592EmhuJlHpNtPvFbF3zpgw44LJ2K-bNQ8PHeBtQA/exec';
+
   const canvas = document.getElementById('signCanvas');
   const ctx = canvas.getContext('2d');
   const hint = document.getElementById('hint');
@@ -220,7 +243,9 @@
   const restartBtn = document.getElementById('restartBtn');
   const formView = document.getElementById('formView');
   const successView = document.getElementById('successView');
-  const previewImg = document.getElementById('previewImg');
+  const errorMsg = document.getElementById('errorMsg');
+  const loading = document.getElementById('loading');
+  const nombreInput = document.getElementById('nombreInput');
 
   let drawing = false;
   let hasSig = false;
@@ -236,8 +261,6 @@
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
   }
-
-  window.addEventListener('resize', () => { if (!hasSig) resize(); });
   resize();
 
   function getPos(e) {
@@ -261,10 +284,7 @@
     const p = getPos(e);
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
-    if (!hasSig) {
-      hasSig = true;
-      saveBtn.disabled = false;
-    }
+    hasSig = true;
   }
 
   function end(e) {
@@ -285,18 +305,37 @@
   clearBtn.addEventListener('click', () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     hasSig = false;
-    saveBtn.disabled = true;
     hint.style.display = '';
+    errorMsg.style.display = 'none';
   });
 
-  saveBtn.addEventListener('click', () => {
-    if (!hasSig) return;
-    const dataURL = canvas.toDataURL('image/png');
-    previewImg.src = dataURL;
+  saveBtn.addEventListener('click', async () => {
+    const nombre = nombreInput.value.trim();
+    if (!nombre || !hasSig) {
+      errorMsg.style.display = 'block';
+      return;
+    }
+    errorMsg.style.display = 'none';
+    saveBtn.disabled = true;
+    loading.style.display = 'block';
+
+    const firma = canvas.toDataURL('image/png');
+
+    try {
+      await fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, firma })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+
+    loading.style.display = 'none';
+    document.getElementById('successName').textContent = 'Gracias, ' + nombre + '. Tu firma ha sido registrada correctamente.';
     formView.style.display = 'none';
     successView.style.display = 'block';
-    // Aquí puedes añadir el envío de la firma a tu servidor si lo necesitas
-    // fetch('TU_URL', { method: 'POST', body: JSON.stringify({ firma: dataURL }) });
   });
 
   restartBtn.addEventListener('click', () => {
@@ -304,8 +343,10 @@
     successView.style.display = 'none';
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     hasSig = false;
-    saveBtn.disabled = true;
     hint.style.display = '';
+    saveBtn.disabled = false;
+    nombreInput.value = '';
+    errorMsg.style.display = 'none';
   });
 </script>
 
